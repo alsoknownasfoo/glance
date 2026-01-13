@@ -259,10 +259,10 @@ func (w *widgetBase) withTitleURL(titleURL string) *widgetBase {
 func (w *widgetBase) withCacheDuration(duration time.Duration) *widgetBase {
 	w.cacheType = cacheTypeDuration
 
-	if duration == -1 || w.CustomCacheDuration == 0 {
-		w.cacheDuration = duration
-	} else {
+	if w.CustomCacheDuration != 0 {
 		w.cacheDuration = time.Duration(w.CustomCacheDuration)
+	} else {
+		w.cacheDuration = duration
 	}
 
 	return w

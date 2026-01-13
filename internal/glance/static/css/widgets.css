@@ -91,3 +91,87 @@
 .widget + .widget {
     margin-top: var(--widget-gap);
 }
+
+/* Progressive cache animations */
+.progressive-cache-fade-out {
+    animation: fadeOut 0.3s ease-out forwards;
+}
+
+.progressive-cache-fade-in {
+    animation: fadeIn 0.3s ease-in forwards;
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0.3;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0.3;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Progressive cache loading spinner */
+.progressive-cache-spinner {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+    animation: spinnerFadeIn 0.3s ease-in;
+}
+
+.progressive-cache-spinner.fade-out {
+    animation: spinnerFadeOut 0.3s ease-out forwards;
+}
+
+.spinner-icon {
+    width: 1.6rem;
+    height: 1.6rem;
+    animation: spin 1s linear infinite;
+}
+
+.spinner-circle {
+    stroke: var(--color-primary);
+    stroke-linecap: round;
+    stroke-dasharray: 50;
+    stroke-dashoffset: 25;
+    opacity: 0.6;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes spinnerFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes spinnerFadeOut {
+    from {
+        opacity: 1;
+        transform: scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+}

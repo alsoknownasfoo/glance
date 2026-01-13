@@ -2,6 +2,7 @@ import { setupPopovers } from './popover.js';
 import { setupMasonries } from './masonry.js';
 import { throttledDebounce, isElementVisible, openURLInNewTab } from './utils.js';
 import { elem, find, findAll } from './templating.js';
+import { setupProgressiveCache } from './progressive-cache.js';
 
 async function fetchPageContent(pageData) {
     // TODO: handle non 200 status codes/time outs
@@ -92,6 +93,35 @@ function updateRelativeTimeForElements(elements)
             continue
 
         element.textContent = timestampToRelativeTime(timestamp);
+    }
+}
+
+// Update relative times in a specific container (for dynamically loaded content)
+function setupRelativeTimesInContainer(container) {
+    const elements = container.querySelectorAll('[data-dynamic-relative-time]');
+    updateRelativeTimeForElements(elements);
+}
+
+async function setupContentInContainer(container) {
+    setupLazyImagesInContainer(container);
+    setupCollapsibleListsInContainer(container);
+    setupCollapsibleGridsInContainer(container);
+    setupRelativeTimesInContainer(container);
+    
+    const calendarElems = container.querySelectorAll('.calendar');
+    if (calendarElems.length > 0) {
+        const calendar = await import('./calendar.js');
+        for (let i = 0; i < calendarElems.length; i++) {
+            calendar.default(calendarElems[i]);
+        }
+    }
+    
+    const todoElems = container.querySelectorAll('.todo');
+    if (todoElems.length > 0) {
+        const todo = await import('./todo.js');
+        for (let i = 0; i < todoElems.length; i++) {
+            todo.default(todoElems[i]);
+        }
     }
 }
 
@@ -308,8 +338,8 @@ function setupGroups() {
     }
 }
 
-function setupLazyImages() {
-    const images = document.querySelectorAll("img[loading=lazy]");
+function setupLazyImagesInContainer(container) {
+    const images = container.querySelectorAll("img[loading=lazy]");
 
     if (images.length == 0) {
         return;
@@ -319,79 +349,39 @@ function setupLazyImages() {
         image.classList.add("finished-transition");
     }
 
-    afterContentReady(() => {
-        setTimeout(() => {
-            for (let i = 0; i < images.length; i++) {
-                const image = images[i];
+    setTimeout(() => {
+        for (let i = 0; i < images.length; i++) {
+            const image = images[i];
 
-                if (image.complete) {
-                    image.classList.add("cached");
-                    setTimeout(() => imageFinishedTransition(image), 1);
-                } else {
-                    // TODO: also handle error event
-                    image.addEventListener("load", () => {
-                        image.classList.add("loaded");
-                        setTimeout(() => imageFinishedTransition(image), 400);
-                    });
-                }
+            if (image.complete) {
+                image.classList.add("cached");
+                setTimeout(() => imageFinishedTransition(image), 1);
+            } else {
+                // TODO: also handle error event
+                image.addEventListener("load", () => {
+                    image.classList.add("loaded");
+                    setTimeout(() => imageFinishedTransition(image), 400);
+                });
             }
-        }, 1);
+        }
+    }, 1);
+}
+
+function setupLazyImages() {
+    afterContentReady(() => {
+        setupLazyImagesInContainer(document);
     });
 }
 
-function attachExpandToggleButton(collapsibleContainer) {
-    const showMoreText = "Show more";
-    const showLessText = "Show less";
-
-    let expanded = false;
-    const button = document.createElement("button");
-    const icon = document.createElement("span");
-    icon.classList.add("expand-toggle-button-icon");
-    const textNode = document.createTextNode(showMoreText);
-    button.classList.add("expand-toggle-button");
-    button.append(textNode, icon);
-    button.addEventListener("click", () => {
-        expanded = !expanded;
-
-        if (expanded) {
-            collapsibleContainer.classList.add("container-expanded");
-            button.classList.add("container-expanded");
-            textNode.nodeValue = showLessText;
-            return;
-        }
-
-        const topBefore = button.getClientRects()[0].top;
-
-        collapsibleContainer.classList.remove("container-expanded");
-        button.classList.remove("container-expanded");
-        textNode.nodeValue = showMoreText;
-
-        const topAfter = button.getClientRects()[0].top;
-
-        if (topAfter > 0)
-            return;
-
-        window.scrollBy({
-            top: topAfter - topBefore,
-            behavior: "instant"
-        });
-    });
-
-    collapsibleContainer.after(button);
-
-    return button;
-};
-
-
-function setupCollapsibleLists() {
-    const collapsibleLists = document.querySelectorAll(".list.collapsible-container");
-
-    if (collapsibleLists.length == 0) {
-        return;
-    }
+function setupCollapsibleListsInContainer(container) {
+    const collapsibleLists = container.querySelectorAll(".list.collapsible-container");
 
     for (let i = 0; i < collapsibleLists.length; i++) {
         const list = collapsibleLists[i];
+        
+        if (list.dataset.collapsibleInitialized === 'true') {
+            continue;
+        }
 
         if (list.dataset.collapseAfter === undefined) {
             continue;
@@ -399,15 +389,12 @@ function setupCollapsibleLists() {
 
         const collapseAfter = parseInt(list.dataset.collapseAfter);
 
-        if (collapseAfter == -1) {
-            continue;
-        }
-
-        if (list.children.length <= collapseAfter) {
+        if (collapseAfter == -1 || list.children.length <= collapseAfter) {
             continue;
         }
 
         attachExpandToggleButton(list);
+        list.dataset.collapsibleInitialized = 'true';
 
         for (let c = collapseAfter; c < list.children.length; c++) {
             const child = list.children[c];
@@ -417,15 +404,15 @@ function setupCollapsibleLists() {
     }
 }
 
-function setupCollapsibleGrids() {
-    const collapsibleGridElements = document.querySelectorAll(".cards-grid.collapsible-container");
+function setupCollapsibleGridsInContainer(container) {
+    const collapsibleGrids = container.querySelectorAll(".cards-grid.collapsible-container");
 
-    if (collapsibleGridElements.length == 0) {
-        return;
-    }
-
-    for (let i = 0; i < collapsibleGridElements.length; i++) {
-        const gridElement = collapsibleGridElements[i];
+    for (let i = 0; i < collapsibleGrids.length; i++) {
+        const gridElement = collapsibleGrids[i];
+        
+        if (gridElement.dataset.collapsibleInitialized === 'true') {
+            continue;
+        }
 
         if (gridElement.dataset.collapseAfterRows === undefined) {
             continue;
@@ -437,12 +424,13 @@ function setupCollapsibleGrids() {
             continue;
         }
 
+        gridElement.dataset.collapsibleInitialized = 'true';
+
         const getCardsPerRow = () => {
             return parseInt(getComputedStyle(gridElement).getPropertyValue('--cards-per-row'));
         };
 
         const button = attachExpandToggleButton(gridElement);
-
         let cardsPerRow;
 
         const resolveCollapsibleItems = () => requestAnimationFrame(() => {
@@ -490,6 +478,58 @@ function setupCollapsibleGrids() {
 
         afterContentReady(() => observer.observe(gridElement));
     }
+}
+
+function attachExpandToggleButton(collapsibleContainer) {
+    const showMoreText = "Show more";
+    const showLessText = "Show less";
+
+    let expanded = false;
+    const button = document.createElement("button");
+    const icon = document.createElement("span");
+    icon.classList.add("expand-toggle-button-icon");
+    const textNode = document.createTextNode(showMoreText);
+    button.classList.add("expand-toggle-button");
+    button.append(textNode, icon);
+    button.addEventListener("click", () => {
+        expanded = !expanded;
+
+        if (expanded) {
+            collapsibleContainer.classList.add("container-expanded");
+            button.classList.add("container-expanded");
+            textNode.nodeValue = showLessText;
+            return;
+        }
+
+        const topBefore = button.getClientRects()[0].top;
+
+        collapsibleContainer.classList.remove("container-expanded");
+        button.classList.remove("container-expanded");
+        textNode.nodeValue = showMoreText;
+
+        const topAfter = button.getClientRects()[0].top;
+
+        if (topAfter > 0)
+            return;
+
+        window.scrollBy({
+            top: topAfter - topBefore,
+            behavior: "instant"
+        });
+    });
+
+    collapsibleContainer.after(button);
+
+    return button;
+};
+
+
+function setupCollapsibleLists() {
+    setupCollapsibleListsInContainer(document);
+}
+
+function setupCollapsibleGrids() {
+    setupCollapsibleGridsInContainer(document);
 }
 
 const contentReadyCallbacks = [];
@@ -748,9 +788,17 @@ async function setupPage() {
 
     const pageElement = document.getElementById("page");
     const pageContentElement = document.getElementById("page-content");
+    const isProgressiveLoading = pageElement.classList.contains('progressive-loading');
+    
     const pageContent = await fetchPageContent(pageData);
-
     pageContentElement.innerHTML = pageContent;
+
+    await setupProgressiveCache(pageData.baseURL);
+
+    if (isProgressiveLoading) {
+        pageElement.classList.add("content-ready");
+        pageElement.setAttribute("aria-busy", "false");
+    }
 
     try {
         setupPopovers();
@@ -766,8 +814,10 @@ async function setupPage() {
         setupDynamicRelativeTime();
         setupLazyImages();
     } finally {
-        pageElement.classList.add("content-ready");
-        pageElement.setAttribute("aria-busy", "false");
+        if (!isProgressiveLoading) {
+            pageElement.classList.add("content-ready");
+            pageElement.setAttribute("aria-busy", "false");
+        }
 
         for (let i = 0; i < contentReadyCallbacks.length; i++) {
             contentReadyCallbacks[i]();
@@ -782,5 +832,7 @@ async function setupPage() {
         }, 300);
     }
 }
+
+export { setupContentInContainer };
 
 setupPage();

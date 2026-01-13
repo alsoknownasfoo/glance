@@ -104,13 +104,15 @@
     </div>
 
     <div class="content-bounds grow{{ if .Page.Width }} content-bounds-{{ .Page.Width }}{{ end }}">
-        <main class="page{{ if .Page.CenterVertically }} center-vertically{{ end }}" id="page" aria-live="polite" aria-busy="true">
+        <main class="page{{ if .Page.CenterVertically }} center-vertically{{ end }}{{ if .Page.ProgressiveLoading }} progressive-loading{{ end }}" id="page" aria-live="polite"{{ if not .Page.ProgressiveLoading }} aria-busy="true"{{ end }}>
             <h1 class="visually-hidden">{{ .Page.Title }}</h1>
             <div class="page-content" id="page-content"></div>
+            {{ if not .Page.ProgressiveLoading }}
             <div class="page-loading-container">
                 <div class="visually-hidden">Loading</div>
                 <div class="loading-icon" aria-hidden="true"></div>
             </div>
+            {{ end }}
         </main>
     </div>
 

@@ -366,6 +366,37 @@ func (a *application) handlePageContentRequest(w http.ResponseWriter, r *http.Re
 	w.Write(responseBytes.Bytes())
 }
 
+func (a *application) handleWidgetContentRequest(w http.ResponseWriter, r *http.Request) {
+	widgetValue := r.PathValue("widget")
+	
+	widgetID, err := strconv.ParseUint(widgetValue, 10, 64)
+	if err != nil {
+		a.handleNotFound(w, r)
+		return
+	}
+
+	if a.handleUnauthorizedResponse(w, r, showUnauthorizedJSON) {
+		return
+	}
+
+	widget, exists := a.widgetByID[widgetID]
+	if !exists {
+		a.handleNotFound(w, r)
+		return
+	}
+
+	// Update the widget if needed
+	now := time.Now()
+	if widget.requiresUpdate(&now) {
+		widget.update(context.Background())
+	}
+
+	// Render and return the widget HTML
+	html := widget.Render()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(html))
+}
+
 func (a *application) addressOfRequest(r *http.Request) string {
 	remoteAddrWithoutPort := func() string {
 		for i := len(r.RemoteAddr) - 1; i >= 0; i-- {
@@ -440,6 +471,8 @@ func (a *application) server() (func() error, func() error) {
 	mux.HandleFunc("GET /{page}", a.handlePageRequest)
 
 	mux.HandleFunc("GET /api/pages/{page}/content/{$}", a.handlePageContentRequest)
+
+	mux.HandleFunc("GET /api/widgets/{widget}/content/{$}", a.handleWidgetContentRequest)
 
 	if !a.Config.Theme.DisablePicker {
 		mux.HandleFunc("POST /api/set-theme/{key}", a.handleThemeChangeRequest)

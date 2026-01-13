@@ -7,8 +7,13 @@
     padding-block: var(--widget-gap);
 }
 
-.page-content, .page.content-ready .page-loading-container {
+.page:not(.progressive-loading) .page-content, 
+.page.content-ready .page-loading-container {
     display: none;
+}
+
+.page.progressive-loading .page-content {
+    display: block;
 }
 
 .page.content-ready > .page-content {
