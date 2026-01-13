@@ -182,6 +182,19 @@ func (w *widgetBase) requiresUpdate(now *time.Time) bool {
 	return now.After(w.nextUpdate)
 }
 
+func (w *widgetBase) GetCacheDurationSeconds() int {
+	if w.cacheType == cacheTypeInfinite {
+		return 0
+	}
+
+	if w.cacheType == cacheTypeDuration {
+		return int(w.cacheDuration.Seconds())
+	}
+
+	// For cacheTypeOnTheHour, return a reasonable default (1 hour)
+	return 3600
+}
+
 func (w *widgetBase) IsWIP() bool {
 	return w.WIP
 }

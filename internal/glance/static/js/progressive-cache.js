@@ -2,6 +2,11 @@ import { setupContentInContainer } from './page.js';
 
 const CACHE_PREFIX = 'glance-widget-';
 const CACHE_VERSION = 1;
+const ANIMATION_DURATION = 300;
+const FAST_UPDATE_THRESHOLD = 60;
+
+let autoRefreshTimers = new Map();
+let isPageVisible = true;
 
 function getCacheKey(widgetId) {
     return `${CACHE_PREFIX}${widgetId}-v${CACHE_VERSION}`;
@@ -47,7 +52,7 @@ function addLoadingIndicator(widgetElement) {
 function removeLoadingIndicator(spinner) {
     if (spinner) {
         spinner.classList.add('fade-out');
-        setTimeout(() => spinner.remove(), 300);
+        setTimeout(() => spinner.remove(), ANIMATION_DURATION);
     }
 }
 
@@ -59,11 +64,17 @@ async function fetchWidgetContent(widgetId, baseURL) {
     return await response.text();
 }
 
-function animateContentUpdate(widgetElement, newContentHTML) {
+function animateContentUpdate(widgetElement, newContentHTML, skipAnimation) {
     return new Promise((resolve) => {
         const contentContainer = widgetElement.querySelector('.widget-content');
         if (!contentContainer) {
             resolve();
+            return;
+        }
+
+        if (skipAnimation) {
+            contentContainer.innerHTML = newContentHTML;
+            setupContentInContainer(contentContainer).then(resolve);
             return;
         }
 
@@ -79,8 +90,8 @@ function animateContentUpdate(widgetElement, newContentHTML) {
             setTimeout(() => {
                 contentContainer.classList.remove('progressive-cache-fade-in');
                 resolve();
-            }, 300);
-        }, 300);
+            }, ANIMATION_DURATION);
+        }, ANIMATION_DURATION);
     });
 }
 
@@ -88,17 +99,18 @@ async function updateProgressiveWidget(widgetElement, baseURL) {
     const widgetId = widgetElement.dataset.widgetId;
     if (!widgetId) return;
 
-    const spinner = addLoadingIndicator(widgetElement);
+    const cacheDuration = parseInt(widgetElement.dataset.cacheDuration, 10);
+    const skipAnimation = cacheDuration > 0 && cacheDuration <= FAST_UPDATE_THRESHOLD;
+    const spinner = skipAnimation ? null : addLoadingIndicator(widgetElement);
 
     try {
         const freshHTML = await fetchWidgetContent(widgetId, baseURL);
-        
         const parser = new DOMParser();
         const doc = parser.parseFromString(freshHTML, 'text/html');
         const newContent = doc.querySelector('.widget-content');
         
         if (newContent) {
-            await animateContentUpdate(widgetElement, newContent.innerHTML);
+            await animateContentUpdate(widgetElement, newContent.innerHTML, skipAnimation);
             saveWidgetToCache(widgetId, freshHTML);
         }
     } catch (error) {
@@ -136,28 +148,76 @@ async function loadCachedContent(widgetElement) {
     return false;
 }
 
-export async function setupProgressiveCache(baseURL) {
-    const pageElement = document.getElementById('page');
-    if (!pageElement || !pageElement.classList.contains('progressive-loading')) {
-        return false;
+function handleVisibilityChange() {
+    isPageVisible = !document.hidden;
+    
+    if (isPageVisible) {
+        autoRefreshTimers.forEach((timer, widgetId) => {
+            if (timer.shouldRefresh) {
+                const widgetElement = document.querySelector(`[data-widget-id="${widgetId}"]`);
+                if (widgetElement) {
+                    updateProgressiveWidget(widgetElement, timer.baseURL);
+                    timer.shouldRefresh = false;
+                }
+            }
+        });
+    }
+}
+
+function scheduleAutoRefresh(widgetElement, baseURL) {
+    const widgetId = widgetElement.dataset.widgetId;
+    const cacheDuration = parseInt(widgetElement.dataset.cacheDuration, 10);
+
+    if (!cacheDuration || cacheDuration <= 0) return;
+
+    const existingTimer = autoRefreshTimers.get(widgetId);
+    if (existingTimer?.timerId) {
+        clearTimeout(existingTimer.timerId);
     }
 
+    const refreshInterval = cacheDuration * 1000;
+
+    const scheduleNext = () => {
+        const timerId = setTimeout(() => {
+            if (isPageVisible) {
+                updateProgressiveWidget(widgetElement, baseURL).then(scheduleNext);
+            } else {
+                const timer = autoRefreshTimers.get(widgetId);
+                if (timer) timer.shouldRefresh = true;
+                scheduleNext();
+            }
+        }, refreshInterval);
+
+        autoRefreshTimers.set(widgetId, {
+            timerId,
+            baseURL,
+            shouldRefresh: false
+        });
+    };
+
+    scheduleNext();
+}
+
+export async function setupProgressiveCache(baseURL) {
+    const pageElement = document.getElementById('page');
+    if (!pageElement?.classList.contains('progressive-loading')) return false;
+
     const widgets = document.querySelectorAll('[data-widget-id]');
-    if (widgets.length === 0) {
-        return false;
-    }
+    if (widgets.length === 0) return false;
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     let hadAnyCachedContent = false;
 
     for (const widgetElement of widgets) {
-        const hadCache = await loadCachedContent(widgetElement);
-        if (hadCache) {
+        if (await loadCachedContent(widgetElement)) {
             hadAnyCachedContent = true;
         }
     }
     
     widgets.forEach(widgetElement => {
         updateProgressiveWidget(widgetElement, baseURL);
+        scheduleAutoRefresh(widgetElement, baseURL);
     });
 
     return hadAnyCachedContent;
@@ -165,8 +225,7 @@ export async function setupProgressiveCache(baseURL) {
 
 export function clearProgressiveCache() {
     try {
-        const keys = Object.keys(localStorage);
-        keys.forEach(key => {
+        Object.keys(localStorage).forEach(key => {
             if (key.startsWith(CACHE_PREFIX)) {
                 localStorage.removeItem(key);
             }
