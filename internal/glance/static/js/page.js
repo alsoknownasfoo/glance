@@ -1,5 +1,5 @@
-import { setupPopovers } from './popover.js';
-import { setupMasonries } from './masonry.js';
+import { setupPopovers, setupPopoversInContainer } from './popover.js';
+import { setupMasonries, setupMasonriesInContainer } from './masonry.js';
 import { throttledDebounce, isElementVisible, openURLInNewTab } from './utils.js';
 import { elem, find, findAll } from './templating.js';
 import { setupProgressiveCache } from './progressive-cache.js';
@@ -13,8 +13,8 @@ async function fetchPageContent(pageData) {
     return content;
 }
 
-function setupCarousels() {
-    const carouselElements = document.getElementsByClassName("carousel-container");
+function setupCarouselsInContainer(container) {
+    const carouselElements = container.querySelectorAll(".carousel-container");
 
     if (carouselElements.length == 0) {
         return;
@@ -23,7 +23,9 @@ function setupCarousels() {
     for (let i = 0; i < carouselElements.length; i++) {
         const carousel = carouselElements[i];
         carousel.classList.add("show-right-cutoff");
-        const itemsContainer = carousel.getElementsByClassName("carousel-items-container")[0];
+        const itemsContainer = carousel.querySelector(".carousel-items-container");
+
+        if (!itemsContainer) continue;
 
         const determineSideCutoffs = () => {
             if (itemsContainer.scrollLeft != 0) {
@@ -44,8 +46,13 @@ function setupCarousels() {
         itemsContainer.addEventListener("scroll", determineSideCutoffsRateLimited);
         window.addEventListener("resize", determineSideCutoffsRateLimited);
 
-        afterContentReady(determineSideCutoffs);
+        // Call immediately for dynamically loaded content
+        requestAnimationFrame(determineSideCutoffs);
     }
+}
+
+function setupCarousels() {
+    setupCarouselsInContainer(document);
 }
 
 const minuteInSeconds = 60;
@@ -103,10 +110,14 @@ function setupRelativeTimesInContainer(container) {
 }
 
 async function setupContentInContainer(container) {
+    setupPopoversInContainer(container);
+    setupCarouselsInContainer(container);
+    setupMasonriesInContainer(container);
     setupLazyImagesInContainer(container);
     setupCollapsibleListsInContainer(container);
     setupCollapsibleGridsInContainer(container);
     setupRelativeTimesInContainer(container);
+    setupTruncatedElementTitlesInContainer(container);
     
     const calendarElems = container.querySelectorAll('.calendar');
     if (calendarElems.length > 0) {
@@ -693,8 +704,8 @@ async function setupTodos() {
     }
 }
 
-function setupTruncatedElementTitles() {
-    const elements = document.querySelectorAll(".text-truncate, .single-line-titles .title, .text-truncate-2-lines, .text-truncate-3-lines");
+function setupTruncatedElementTitlesInContainer(container) {
+    const elements = container.querySelectorAll(".text-truncate, .single-line-titles .title, .text-truncate-2-lines, .text-truncate-3-lines");
 
     if (elements.length == 0) {
         return;
@@ -705,6 +716,10 @@ function setupTruncatedElementTitles() {
         if (element.getAttribute("title") === null)
             element.title = element.innerText.trim().replace(/\s+/g, " ");
     }
+}
+
+function setupTruncatedElementTitles() {
+    setupTruncatedElementTitlesInContainer(document);
 }
 
 async function changeTheme(key, onChanged) {
@@ -801,18 +816,14 @@ async function setupPage() {
     }
 
     try {
-        setupPopovers();
-        setupClocks()
-        await setupCalendars();
-        await setupTodos();
-        setupCarousels();
+        // Setup page-level components
+        setupClocks();
         setupSearchBoxes();
-        setupCollapsibleLists();
-        setupCollapsibleGrids();
         setupGroups();
-        setupMasonries();
         setupDynamicRelativeTime();
-        setupLazyImages();
+        
+        // Setup content (shared with progressive updates)
+        await setupContentInContainer(pageContentElement);
     } finally {
         if (!isProgressiveLoading) {
             pageElement.classList.add("content-ready");

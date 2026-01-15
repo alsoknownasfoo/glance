@@ -1,8 +1,8 @@
 
 import { clamp } from "./utils.js";
 
-export function setupMasonries() {
-    const masonryContainers = document.getElementsByClassName("masonry");
+export function setupMasonriesInContainer(container) {
+    const masonryContainers = container.querySelectorAll(".masonry");
 
     for (let i = 0; i < masonryContainers.length; i++) {
         const container = masonryContainers[i];
@@ -47,4 +47,8 @@ export function setupMasonries() {
         const observer = new ResizeObserver(() => requestAnimationFrame(render));
         observer.observe(container);
     }
+}
+
+export function setupMasonries() {
+    setupMasonriesInContainer(document);
 }

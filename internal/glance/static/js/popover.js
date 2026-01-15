@@ -184,8 +184,8 @@ function handleHidePopoverOnEscape(event) {
     }
 }
 
-export function setupPopovers() {
-    const targets = document.querySelectorAll("[data-popover-type]");
+export function setupPopoversInContainer(container) {
+    const targets = container.querySelectorAll("[data-popover-type]");
 
     for (let i = 0; i < targets.length; i++) {
         const target = targets[i];
@@ -198,4 +198,8 @@ export function setupPopovers() {
 
         target.addEventListener("mouseleave", handleMouseLeave);
     }
+}
+
+export function setupPopovers() {
+    setupPopoversInContainer(document);
 }
